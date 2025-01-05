@@ -1,4 +1,4 @@
 usename: superadmin
 email: superadmin@littlelemon.com
 
-pass: superadmin21
+pass: MySuperAdmin21

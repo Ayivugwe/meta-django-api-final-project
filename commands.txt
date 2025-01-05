@@ -1,0 +1,8 @@
+In the shell:
+
+from django.contrib.auth.models import Group
+Group.objects.create(name='Manager')
+Group.objects.create(name='Delivery Crew')
+exit()
+
+To create groups in the code instead of the admin dashboard
