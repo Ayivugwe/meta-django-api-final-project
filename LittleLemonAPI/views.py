@@ -1,15 +1,35 @@
-
 # Create your views here.
 from django.shortcuts import render
 from rest_framework import generics, viewsets, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User, Group
 from django.db import transaction
 from .models import Category, MenuItem, Cart, Order, OrderItem
-from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderSerializer
+from .serializers import CategorySerializer, MenuItemSerializer, CartSerializer, OrderSerializer, UserGroupSerializer
 from decimal import Decimal
+
+class CategoryListView(generics.ListCreateAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdminUser]
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return []
+        return [IsAdminUser()]
+
+class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [IsAdminUser]
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return []
+        return [IsAdminUser()]
 
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
@@ -52,6 +72,13 @@ class CartView(generics.ListCreateAPIView):
         price = unit_price * quantity
         serializer.save(user=self.request.user, unit_price=unit_price, price=price)
 
+class CartManagementView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def delete(self, request):
+        Cart.objects.filter(user=request.user).delete()
+        return Response({'message': 'Cart cleared successfully'}, status=status.HTTP_200_OK)
+
 class CartItemView(generics.DestroyAPIView):
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
@@ -74,6 +101,10 @@ class OrderView(generics.ListCreateAPIView):
     @transaction.atomic
     def perform_create(self, serializer):
         cart_items = Cart.objects.filter(user=self.request.user)
+        
+        if not cart_items.exists():
+            raise ValidationError("Cart is empty")
+            
         total = sum(item.price for item in cart_items)
         
         order = serializer.save(user=self.request.user, total=total)
@@ -107,6 +138,110 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
             serializer.save(status=serializer.validated_data['status'])
         else:
             serializer.save()
+
+class ManagerGroupView(generics.GenericAPIView):
+    permission_classes = [IsAdminUser]
+    serializer_class = UserGroupSerializer
+    
+    def get(self, request):
+        managers = User.objects.filter(groups__name='Manager')
+        serializer = self.get_serializer(managers, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            managers = Group.objects.get(name='Manager')
+            managers.user_set.add(user)
+            return Response({'message': 'User added to managers group'})
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+class OrderManagementView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.groups.filter(name='Manager').exists():
+            return Order.objects.all()
+        elif user.groups.filter(name='Delivery Crew').exists():
+            return Order.objects.filter(delivery_crew=user)
+        return Order.objects.filter(user=user)
+    
+    def patch(self, request, pk=None):
+        order = get_object_or_404(Order, pk=pk)
+        if request.user.groups.filter(name='Manager').exists():
+            delivery_crew_username = request.data.get('delivery_crew')
+            if delivery_crew_username:
+                delivery_crew = get_object_or_404(User, username=delivery_crew_username)
+                order.delivery_crew = delivery_crew
+                order.save()
+                return Response({'message': 'Delivery crew assigned'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+class ManagerUserView(generics.GenericAPIView):
+    permission_classes = [IsAdminUser]
+    
+    def post(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            delivery_crew = Group.objects.get(name='Delivery Crew')
+            delivery_crew.user_set.add(user)
+            return Response({'message': 'User added to delivery crew'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            delivery_crew = Group.objects.get(name='Delivery Crew')
+            delivery_crew.user_set.remove(user)
+            return Response({'message': 'User removed from delivery crew'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+
+class DeliveryCrewGroupView(generics.GenericAPIView):
+    permission_classes = [IsAdminUser]
+    
+    def post(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            delivery_crew = Group.objects.get(name='Delivery Crew')
+            delivery_crew.user_set.add(user)
+            return Response({'message': 'User added to delivery crew group'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            delivery_crew = Group.objects.get(name='Delivery Crew')
+            delivery_crew.user_set.remove(user)
+            return Response({'message': 'User removed from delivery crew group'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+
+class DeliveryCrewUserView(generics.GenericAPIView):
+    permission_classes = [IsAdminUser]
+    
+    def post(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            delivery_crew = Group.objects.get(name='Delivery Crew')
+            delivery_crew.user_set.add(user)
+            return Response({'message': 'User added to delivery crew'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request):
+        username = request.data.get('username')
+        if username:
+            user = get_object_or_404(User, username=username)
+            delivery_crew = Group.objects.get(name='Delivery Crew')
+            delivery_crew.user_set.remove(user)
+            return Response({'message': 'User removed from delivery crew'}, status=status.HTTP_200_OK)
+        return Response({'message': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
 
 class GroupManagementView(generics.GenericAPIView):
     permission_classes = [IsAdminUser]
