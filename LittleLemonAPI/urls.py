@@ -13,23 +13,14 @@ urlpatterns = [
    path('categories/', views.CategoryListView.as_view(), name='category-list'),
    path('categories/<int:pk>/', views.CategoryDetailView.as_view(), name='category-detail'),
    # Cart endpoints  
-   path('cart/menu-items/', views.CartManagementView.as_view(), {
-       'methods': ['GET', 'POST', 'DELETE']
-   }),
+   path('cart/menu-items/', views.CartView.as_view(), name='cart-list'),
+   path('cart/menu-items/<int:pk>/', views.CartItemView.as_view(), name='cart-detail'),
    # Order endpoints
-   path('orders/', views.OrderManagementView.as_view(), {
-       'methods': ['GET', 'POST']
-   }),
-   path('orders/<int:orderId>/', views.OrderDetailView.as_view(), {
-       'methods': ['GET', 'PUT', 'PATCH', 'DELETE']
-   }),
+   path('orders/', views.OrderListView.as_view(), name='order-list'),  
+   path('orders/<int:pk>/', views.OrderDetailView.as_view(), name='order-detail'),
    # User group endpoints
-   path('groups/manager/users/', views.ManagerGroupView.as_view(), {
-       'methods': ['GET', 'POST']
-   }),
-   path('groups/manager/users/<int:userId>/', views.ManagerUserView.as_view(), {
-       'methods': ['DELETE']
-   }),
+   path('groups/manager/users/', views.ManagerGroupListView.as_view(), name='manager-users-list'),
+   path('groups/manager/users/<int:pk>/', views.ManagerGroupDetailView.as_view(), name='manager-users-detail'),
    path('groups/delivery-crew/users/', views.DeliveryCrewGroupView.as_view(), {
        'methods': ['GET', 'POST']
    }), 
